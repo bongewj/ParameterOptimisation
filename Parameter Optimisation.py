@@ -9,27 +9,21 @@ Created on Sat Oct 23 09:00:01 2021
 
 import numpy as np
 import pandas as pd
-import os
-os.chdir(r'D:\SC Stuff\762 with JC parameters for steel_files\Mild Steel\Sweep 2')
-os.getcwd()
+
+# Import Autodyn simulation results of parameter sweep. Parameters of interest include: mesh size of projectile, ratio of mesh size of target to mesh size of projectile, mesh size of target, erosion criteria of target and projectile material 
 
 df = pd.read_excel('Parameter Sweep 2.xlsx')
 df = df.drop(labels = [0,1], axis = 0).reset_index(drop = True)
 df = df.rename(columns = df.iloc[0]).drop(df.index[0]).reset_index(drop = True)
 
-# MS
+# Referencing results by V. Madhu, T. Balakrishna and N.K. Gupta, accessed from https://core.ac.uk/download/pdf/333720448.pdf
+
 ref_vel = 411
 ref_thick = 20
-
-# Al
-#ref_vel = 386.9
-#ref_thick = 50
 
 df_obj = df[['Remaining Thickness','Residual Vel']]
 df_obj = df_obj.iloc[0:33,:]
 df_obj = df_obj.fillna(0)
-
-#obj = -((1-abs(df_obj['Residual Vel']-ref_vel)/ref_vel)**2-(df_obj['Remaining Thickness']/ref_thick))
 
 df2 = df.iloc[0:33,:]
 df2 = df2.drop(['factor name'], axis = 1)
@@ -40,7 +34,7 @@ df3.columns = ['Threat Mesh',' Target Mesh Ratio','Erosion Criteria Threat','Ero
 df4 = df2[['Threat Mesh (x,y)','Target mesh (x,y)','Erosion Criteria AP','Erosion Criteria Target']]
 df4.columns = ['Threat Mesh',' Target Mesh','Erosion Criteria Threat','Erosion Criteria Target']
 
-#%%
+# initial approach used a sum of the scaled values of the residual thickness (if the projectile did not penetrate the target) or residual velocity (if it did) as the cost function
 
 from sklearn.preprocessing import StandardScaler
 
@@ -60,7 +54,7 @@ data2 = trans2.fit_transform(obj2)
 
 obj = obj1 - obj2
 
-#%%
+# Subsequently, an elliptic paraboloid loss function was used as a scaling factor to penalise results where the projectile did not penetrate the target. The code below was referenced from a response provided in Stack Overflow (https://stackoverflow.com/questions/50711530/what-would-be-a-good-loss-function-to-penalize-the-magnitude-and-sign-difference)
 
 # elliptic_paraboloid_loss is a scaling factor to apply to loss function
 
@@ -89,10 +83,9 @@ loss_map = np.zeros((len(obj)))
 for i in range(len(obj)):
 
        loss_map[i] = obj[i]*elliptic_paraboloid_loss(obj[i], 1, c_diff_sign, c_same_sign)
-       
 
-#%%
-
+# Split the data into the training and testing data set and fit regression models to them. As the relation between the variables are unknown, polynomial features was used to include non-linear terms. Lasso and Ridge regressions were also performed to try to minimise the number of sailent features.
+        
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.model_selection import train_test_split
 from sklearn import linear_model
@@ -101,6 +94,8 @@ order = 2
 
 poly = PolynomialFeatures(order)
 poly_variables = poly.fit_transform(df3)
+
+# Try fitting use the ratio of mesh sizes
 
 score1 = 0
 score2 = 0
@@ -127,7 +122,7 @@ while (score2 < 0.65 or score3 < 0.65):
     print(score3)
     print((score2 < 0.65 or score3 < 0.65))
 
-#%%
+# After a fit was obtained, an optimisation was attempted to find optimal parameters that would maximise the accuracy of simulations. 
 
 from scipy.optimize import curve_fit as cf
 from scipy import optimize as opt
@@ -140,7 +135,11 @@ optim_func_lasso = 0
 optim_param_ridge = []
 optim_func_ridge = 0
 
+# define constraints
+
 x0_bounds = ((0.5,1),(1,3),(.5,5),(.5,5))
+
+# repeat with random seed to find the global minima
 
 for i in range(1000):
     
@@ -164,8 +163,7 @@ for i in range(1000):
         optim_param_ridge = opt_param_ridge.x
         optim_func_ridge = opt_param_ridge.fun
 
-
-#%%
+# Repeat process using mesh size of the target instead of the ratio
 
 poly2 = PolynomialFeatures(order)
 poly_variables2 = poly2.fit_transform(df4)
@@ -195,7 +193,7 @@ while (score5 < 0.7 or score6 < 0.7):
     print(score6)
     print(score5 < 0.7 or score6 < 0.7)
 
-#%%
+# Attempt optimisation  
 
 optim_param_lasso2 = []
 optim_func_lasso2 = 0
